@@ -52,6 +52,9 @@ Edit the CSS variables in `public/styles.css`:
 - Safari
 - Edge
 
+## Long-term support
+Irregularly, I will back up this repository on Zenodo. Only use the Zenodo files if this repository are down (you won't be able to access the the following link if my repository is down, but alas, you can probably look my name up in Zenodo so something): [![DOI](https://zenodo.org/badge/latestdoi/UrielMenalled/lab-website.svg)](https://zenodo.org/badge/latestdoi/UrielMenalled/lab-website)
+
 ## License
 
 People are free to use this repository as a template for their own website. However, all content on this website belongs to Uriel Menalled and the Agroecology Lab at Montana State University.
