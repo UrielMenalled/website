@@ -3,14 +3,18 @@
  *
  * Fetches all public GitHub repositories for a user,
  * filters out excluded repos, and updates the marked
- * section in index.html with styled repository tiles.
+ * section in research.html with styled repository tiles.
  *
  * Runs in GitHub Actions — no API token required for public repos.
  */
 
-const https = require("https");
-const fs = require("fs");
-const path = require("path");
+import https from "https";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -18,7 +22,7 @@ const USERNAME = process.env.GITHUB_USERNAME || "UrielMenalled";
 const EXCLUDED_REPOS = ["UrielMenalled", "lab-website"];
 const HTML_FILE = path.join(process.cwd(), "research.html");
 
-// These markers must exist in your index.html — see README snippet
+// These markers must exist in your research.html
 const START_MARKER = "<!-- REPO-TILES:START -->";
 const END_MARKER = "<!-- REPO-TILES:END -->";
 
@@ -51,7 +55,6 @@ function fetchRepos(username) {
               resolve(allRepos);
             } else {
               allRepos.push(...repos);
-              // GitHub paginates at 100; fetch next page if full
               if (repos.length === 100) {
                 fetchPage(page + 1);
               } else {
@@ -127,11 +130,11 @@ function formatDate(isoString) {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-// ── Update index.html ─────────────────────────────────────────────────────────
+// ── Update research.html ──────────────────────────────────────────────────────
 
 function updateHTML(tilesHTML) {
   if (!fs.existsSync(HTML_FILE)) {
-    throw new Error(`index.html not found at ${HTML_FILE}`);
+    throw new Error(`research.html not found at ${HTML_FILE}`);
   }
 
   const original = fs.readFileSync(HTML_FILE, "utf8");
@@ -141,7 +144,7 @@ function updateHTML(tilesHTML) {
 
   if (startIdx === -1 || endIdx === -1) {
     throw new Error(
-      `Markers not found in index.html.\n` +
+      `Markers not found in research.html.\n` +
         `Make sure both "${START_MARKER}" and "${END_MARKER}" exist in your file.`
     );
   }
@@ -151,12 +154,12 @@ function updateHTML(tilesHTML) {
   const updated = before + tilesHTML + after;
 
   if (updated === original) {
-    console.log("No changes detected — index.html is already up to date.");
+    console.log("No changes detected — research.html is already up to date.");
     return false;
   }
 
   fs.writeFileSync(HTML_FILE, updated, "utf8");
-  console.log("index.html updated successfully.");
+  console.log("research.html updated successfully.");
   return true;
 }
 
