@@ -5,14 +5,22 @@ A multi-page website for The Agroecology Lab at Montana State University, design
 Some of the important files in this repo include
 
 ```
-docs/
-├── index.html          # Homepage
-├── team.html           # Meet the Team
-├── research.html       # Research Areas
-├── teaching.html       # Teaching Experience
-├── publications.html   # Publications List
-├── join.html           # Join Us / Prospective Students
-└── styles.css          # Shared stylesheet
+.github/                    # The automation folder
+├── workflows/                # Folder with instructions
+└── CODEOWNERS                # File listing who can approve pull requests
+docs/                       # The website folder
+├── images/                   # Folder with all images
+├── videos/                   # Folder with all videos
+├── index.html                # Homepage
+├── team.html                 # Meet the Team
+├── research.html             # Research Areas
+├── teaching.html             # Teaching Experience
+├── publications.html         # Publications List
+├── join.html                 # Join Us / Prospective Students
+└── styles.css                # Website formatting/styles
+scripts/                    # The webscraping folder
+├── update-repos.js           # GitHub account scraping
+└── update_publications.py    # SemanticScholars account publication scraping
 ```
 
 ## Some notes for people interested in using this code
