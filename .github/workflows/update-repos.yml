@@ -1,0 +1,38 @@
+name: Update Public Repositories
+
+on:
+  schedule:
+    # Runs at 06:00 UTC on the 1st of every month (approx. every 30 days)
+    - cron: "0 6 1 * *"
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  update-repos:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Needed to commit changes back to the repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch repos and update HTML
+        run: node scripts/update-repos.js
+        env:
+          GITHUB_USERNAME: UrielMenalled
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          # Only commit if index.html was actually modified
+          git diff --cached --quiet || git commit -m "chore: update public repositories list [skip ci]"
+          git push
+          
