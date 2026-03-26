@@ -187,11 +187,11 @@ def render_publication_html(pub: dict) -> str:
     volume  = pub.get("volume", "")
     number  = pub.get("number", "")
 
-    # Title as a DOI link if available, otherwise plain text — always bold
+    # Title as a DOI link if available, otherwise plain text
     if url:
-        title_html = f'<strong><a href="{url}" target="_blank" rel="noopener noreferrer">{title}</a></strong>'
+        title_html = f'<a href="{url}" target="_blank" rel="noopener noreferrer">{title}</a>'
     else:
-        title_html = f'<strong>{title}</strong>'
+        title_html = title
 
     # "Volume(Issue)" e.g. "2(1)", or just volume, or omitted
     vol_issue = ""
