@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 
 const USERNAME = process.env.GITHUB_USERNAME || "UrielMenalled";
 const EXCLUDED_REPOS = ["UrielMenalled", "lab-website"];
-const HTML_FILE = path.join(process.cwd(), "research.html");
+const HTML_FILE = path.join(process.cwd(), "docs", "research.html");
 
 // These markers must exist in your research.html
 const START_MARKER = "<!-- REPO-TILES:START -->";
