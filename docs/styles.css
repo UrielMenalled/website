@@ -485,7 +485,9 @@ section[id] {
   }
 
   .gh-btn::after {
-    font-size: 0.45em;
+    display: inline-block;
+    transform: scale(0.75); /* Adjust this value to make it smaller or larger */
+    transform-origin: center;
   }
 }
 
