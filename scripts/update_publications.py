@@ -42,6 +42,40 @@ END_MARKER   = "<!-- PUBLICATIONS_END -->"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+def format_authors(raw: str) -> str:
+    """
+    Convert scholarly's 'First [Middle] Last and First Last and ...'
+    into 'Last FI, Last FI, ...' to match citation style.
+    e.g. 'Uri D Menalled and Kelly Bybee-Finley' -> 'Menalled UD, Bybee-Finley KB'
+    """
+    if not raw:
+        return ""
+    parts = []
+    for name in raw.split(" and "):
+        name = name.strip()
+        tokens = name.split()
+        if not tokens:
+            continue
+        last = tokens[-1]
+        initials = "".join(t[0].upper() for t in tokens[:-1] if t)
+        parts.append(f"{last} {initials}" if initials else last)
+    return ", ".join(parts)
+
+
+def is_blocked(pub: dict) -> bool:
+    """Return True if this publication should be excluded based on BLOCKED_VENUES.
+    Checks venue, journal, booktitle, and title fields."""
+    bib = pub.get("_raw_bib", {})
+    searchable = " ".join([
+        bib.get("venue", ""),
+        bib.get("journal", ""),
+        bib.get("booktitle", ""),
+        bib.get("title", ""),
+        pub.get("venue", ""),
+    ]).lower()
+    return any(blocked.lower() in searchable for blocked in BLOCKED_VENUES)
+
+
 def fetch_publications(scholar_id: str) -> list[dict]:
     """Fetch all publications for a Google Scholar author ID."""
     print(f"Fetching publications for Scholar ID: {scholar_id}")
@@ -53,40 +87,46 @@ def fetch_publications(scholar_id: str) -> list[dict]:
         sys.exit(1)
 
     pubs = []
-    for pub in author.get("publications", []):
+    raw_pubs = author.get("publications", [])
+    print(f"Found {len(raw_pubs)} total publication(s) on Scholar. Fetching details...")
+
+    for i, pub in enumerate(raw_pubs):
+        try:
+            pub = scholarly.fill(pub)   # fetch full bib details for each entry
+        except Exception as e:
+            print(f"  Warning: could not fill pub #{i+1}, using partial data. ({e})")
+        time.sleep(1)                   # be polite to Scholar
+
         bib = pub.get("bib", {})
         title   = bib.get("title", "Untitled")
         year    = bib.get("pub_year", "")
         venue   = bib.get("venue", "") or bib.get("journal", "") or bib.get("booktitle", "")
-        authors = bib.get("author", "")
+        authors = format_authors(bib.get("author", ""))
         url     = pub.get("pub_url", "")
-        cited   = pub.get("num_citations", 0)
-        volume = bib.get("volume", "")
-        number = bib.get("number", "")
-        pubs.append({
-            "title":   title,
-            "year":    year,
-            "venue":   venue,
-            "authors": authors,
-            "url":     url,
-            "cited":   cited,
-            "volume":  volume,
-            "number":  number,
-        })
-        time.sleep(0.5)   # be polite to Scholar
+        volume  = bib.get("volume", "")
+        number  = bib.get("number", "")
 
-    # Filter out blocked venues
-    def is_blocked(pub):
-        venue = pub["venue"].lower()
-        return any(blocked.lower() in venue for blocked in BLOCKED_VENUES)
+        entry = {
+            "title":    title,
+            "year":     year,
+            "venue":    venue,
+            "authors":  authors,
+            "url":      url,
+            "volume":   volume,
+            "number":   number,
+            "_raw_bib": bib,   # kept for blocking check, not rendered
+        }
 
-    before = len(pubs)
-    pubs = [p for p in pubs if not is_blocked(p)]
-    print(f"Filtered out {before - len(pubs)} publication(s) from blocked venues.")
+        if is_blocked(entry):
+            print(f"  Excluded (blocked venue): {title}")
+            continue
+
+        pubs.append(entry)
+        print(f"  Kept: {title[:60]}{'...' if len(title) > 60 else ''}")
 
     # Sort newest first
     pubs.sort(key=lambda p: p["year"] or "0", reverse=True)
-    print(f"Keeping {len(pubs)} publication(s).")
+    print(f"\nKeeping {len(pubs)} publication(s) after filtering.")
     return pubs
 
 
@@ -94,7 +134,7 @@ def render_publication_html(pub: dict) -> str:
     """Render a single publication as an HTML list item.
 
     Format:
-      Title (DOI link). Authors (Year). Journal. Volume(Issue).
+      Bold Title (DOI link). Authors (Year). Italic Journal. Volume(Issue).
     """
     title   = pub["title"]
     authors = pub["authors"]
