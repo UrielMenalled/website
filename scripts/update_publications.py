@@ -1,12 +1,13 @@
 """
 update_publications.py
 
-Fetches publications from a Google Scholar profile and updates the
+Fetches publications from the Semantic Scholar API and updates the
 publications section in your site's HTML (or JSX) file.
 
 Requirements:
-  - SCHOLAR_ID env var: your Google Scholar author ID
-    (the string after "user=" in your Scholar profile URL)
+  - SEMANTIC_SCHOLAR_ID env var: your Semantic Scholar author ID
+    (the numeric ID from your Semantic Scholar profile URL,
+     e.g. "145113266" from semanticscholar.org/author/145113266)
   - PUBLICATIONS_FILE env var: relative path to the file containing
     your publications list, e.g. "src/components/Publications.jsx"
     or "index.html"
@@ -19,16 +20,20 @@ on their own lines to define where publications are injected:
     <!-- PUBLICATIONS_END -->
 """
 
+import json
 import os
 import re
 import sys
-import time
-from scholarly import scholarly
+import urllib.error
+import urllib.request
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-SCHOLAR_ID = os.environ.get("SCHOLAR_ID", "").strip()
+SEMANTIC_SCHOLAR_ID = os.environ.get("SEMANTIC_SCHOLAR_ID", "").strip()
 PUBLICATIONS_FILE = os.environ.get("PUBLICATIONS_FILE", "").strip()
+
+S2_API_BASE = "https://api.semanticscholar.org/graph/v1"
+S2_PAPER_FIELDS = "title,year,venue,authors,url,externalIds,journal"
 
 # Publications whose venue contains any of these strings (case-insensitive) will be excluded
 BLOCKED_VENUES = [
@@ -42,17 +47,21 @@ END_MARKER   = "<!-- PUBLICATIONS_END -->"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def format_authors(raw: str) -> str:
+def format_authors(authors: list[dict]) -> str:
     """
-    Convert scholarly's 'First [Middle] Last and First Last and ...'
-    into 'Last FI, Last FI, ...' to match citation style.
-    e.g. 'Uri D Menalled and Kelly Bybee-Finley' -> 'Menalled UD, Bybee-Finley KB'
+    Convert Semantic Scholar author list into 'Last FI, Last FI, ...'
+    to match citation style.
+    Each author is a dict with at least a 'name' key, e.g.
+    [{"authorId": "123", "name": "Uri D Menalled"}, ...]
+    Result: 'Menalled UD, ...'
     """
-    if not raw:
+    if not authors:
         return ""
     parts = []
-    for name in raw.split(" and "):
-        name = name.strip()
+    for author in authors:
+        name = (author.get("name") or "").strip()
+        if not name:
+            continue
         tokens = name.split()
         if not tokens:
             continue
@@ -64,9 +73,7 @@ def format_authors(raw: str) -> str:
 
 def is_blocked(pub: dict) -> bool:
     """Return True if this publication should be excluded based on BLOCKED_VENUES.
-    Checks venue, journal, booktitle, conference, and title fields.
-    Also checks the venue captured before scholarly.fill() to handle cases
-    where fill() overwrites the venue with an empty value."""
+    Checks venue, journal, booktitle, conference, and title fields."""
     bib = pub.get("_raw_bib", {})
     searchable = " ".join([
         bib.get("venue", ""),
@@ -80,50 +87,77 @@ def is_blocked(pub: dict) -> bool:
     return any(blocked.lower() in searchable for blocked in BLOCKED_VENUES)
 
 
-def fetch_publications(scholar_id: str) -> list[dict]:
-    """Fetch all publications for a Google Scholar author ID."""
-    print(f"Fetching publications for Scholar ID: {scholar_id}")
+def fetch_publications(author_id: str) -> list[dict]:
+    """Fetch all publications for a Semantic Scholar author ID."""
+    print(f"Fetching publications for Semantic Scholar author ID: {author_id}")
+
+    url = (
+        f"{S2_API_BASE}/author/{author_id}/papers"
+        f"?fields={S2_PAPER_FIELDS}&limit=1000"
+    )
+
     try:
-        author = scholarly.search_author_id(scholar_id)
-        author = scholarly.fill(author, sections=["publications"])
+        req = urllib.request.Request(url, headers={"User-Agent": "LabWebsite/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = json.loads(response.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"ERROR: Author ID '{author_id}' not found on Semantic Scholar.")
+        elif e.code == 429:
+            print("ERROR: Rate-limited by Semantic Scholar. Try again later.")
+        else:
+            print(f"ERROR: Semantic Scholar API returned HTTP {e.code}. {e.reason}")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"ERROR: Could not connect to Semantic Scholar API. {e.reason}")
+        sys.exit(1)
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"ERROR: Invalid response from Semantic Scholar API. {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"ERROR: Could not fetch Scholar profile. {e}")
+        print(f"ERROR: Unexpected error fetching Semantic Scholar profile. {e}")
         sys.exit(1)
 
+    raw_pubs = data.get("data", [])
+    print(f"Found {len(raw_pubs)} total publication(s). Processing...")
+
     pubs = []
-    raw_pubs = author.get("publications", [])
-    print(f"Found {len(raw_pubs)} total publication(s) on Scholar. Fetching details...")
+    for paper in raw_pubs:
+        title = paper.get("title") or "Untitled"
+        year = str(paper.get("year") or "")
+        venue = paper.get("venue") or ""
+        journal_info = paper.get("journal") or {}
+        if not venue and journal_info:
+            venue = journal_info.get("name") or ""
 
-    for i, pub in enumerate(raw_pubs):
-        # Capture the venue from the unfilled publication (comes from the author's
-        # Scholar profile page). scholarly.fill() may overwrite the bib and lose it.
-        unfilled_venue = pub.get("bib", {}).get("venue", "")
+        authors = format_authors(paper.get("authors") or [])
 
-        try:
-            pub = scholarly.fill(pub)   # fetch full bib details for each entry
-        except Exception as e:
-            print(f"  Warning: could not fill pub #{i+1}, using partial data. ({e})")
-        time.sleep(1)                   # be polite to Scholar
+        # Prefer DOI link, then Semantic Scholar URL
+        external_ids = paper.get("externalIds") or {}
+        doi = external_ids.get("DOI") or ""
+        pub_url = f"https://doi.org/{doi}" if doi else (paper.get("url") or "")
 
-        bib = pub.get("bib", {})
-        title   = bib.get("title", "Untitled")
-        year    = bib.get("pub_year", "")
-        venue   = bib.get("venue", "") or bib.get("journal", "") or bib.get("booktitle", "")
-        authors = format_authors(bib.get("author", ""))
-        url     = pub.get("pub_url", "")
-        volume  = bib.get("volume", "")
-        number  = bib.get("number", "")
+        volume = journal_info.get("volume") or "" if journal_info else ""
+        # Semantic Scholar does not provide issue numbers; kept for backward
+        # compatibility with the existing publication data structure.
+        number = ""
 
         entry = {
             "title":           title,
             "year":            year,
             "venue":           venue,
             "authors":         authors,
-            "url":             url,
+            "url":             pub_url,
             "volume":          volume,
             "number":          number,
-            "_raw_bib":        bib,            # kept for blocking check, not rendered
-            "_unfilled_venue": unfilled_venue, # pre-fill venue, kept for blocking check
+            "_raw_bib": {
+                "venue":       venue,
+                "journal":     journal_info.get("name") or "" if journal_info else "",
+                "booktitle":   "",
+                "conference":  "",
+                "title":       title,
+            },
+            "_unfilled_venue": "",
         }
 
         if is_blocked(entry):
@@ -299,8 +333,8 @@ def update_file(filepath: str, pubs: list[dict]) -> bool:
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if not SCHOLAR_ID:
-        print("ERROR: SCHOLAR_ID environment variable is not set.")
+    if not SEMANTIC_SCHOLAR_ID:
+        print("ERROR: SEMANTIC_SCHOLAR_ID environment variable is not set.")
         sys.exit(1)
     if not PUBLICATIONS_FILE:
         print("ERROR: PUBLICATIONS_FILE environment variable is not set.")
@@ -309,5 +343,5 @@ if __name__ == "__main__":
         print(f"ERROR: File not found: '{PUBLICATIONS_FILE}'")
         sys.exit(1)
 
-    pubs = fetch_publications(SCHOLAR_ID)
+    pubs = fetch_publications(SEMANTIC_SCHOLAR_ID)
     update_file(PUBLICATIONS_FILE, pubs)

@@ -1,4 +1,4 @@
-name: Update Publications from Google Scholar
+name: Update Publications from Semantic Scholar
 
 on:
   schedule:
@@ -22,13 +22,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          pip install scholarly
-
       - name: Run publication update script
         env:
-          SCHOLAR_ID: ${{ vars.SCHOLAR_ID }}
+          SEMANTIC_SCHOLAR_ID: ${{ vars.SEMANTIC_SCHOLAR_ID }}
           PUBLICATIONS_FILE: ${{ vars.PUBLICATIONS_FILE }}
         run: |
           python scripts/update_publications.py
@@ -41,7 +37,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No new publications found. Nothing to commit."
           else
-            git commit -m "chore: update publications from Google Scholar [skip ci]"
+            git commit -m "chore: update publications from Semantic Scholar [skip ci]"
             git push
             echo "Publications updated and pushed."
           fi
