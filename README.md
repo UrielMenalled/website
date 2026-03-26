@@ -1,6 +1,6 @@
 # The Agroecology Lab - GitHub Pages Website
 
-A multi-page website for The Agroecology Lab at Montana State University, designed for deployment on GitHub Pages. The GitHub actions associated to this repository should update the publications and code using my Semantic Scholars and GitHub accounts, respectively. 
+A multi-page website for The Agroecology Lab at Montana State University, designed for deployment on GitHub Pages. The GitHub actions associated with this repository should update the publications and code using my Semantic Scholars and GitHub accounts, respectively. In my opinion, this is the stand-out benefit of this website. If you want to reap these benefits, you will need to create an account for both services, make updates to the variables (in repo settings) and scripts.
 
 Some of the important files in this repo include
 
