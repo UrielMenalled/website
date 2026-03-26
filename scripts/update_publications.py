@@ -64,14 +64,18 @@ def format_authors(raw: str) -> str:
 
 def is_blocked(pub: dict) -> bool:
     """Return True if this publication should be excluded based on BLOCKED_VENUES.
-    Checks venue, journal, booktitle, and title fields."""
+    Checks venue, journal, booktitle, conference, and title fields.
+    Also checks the venue captured before scholarly.fill() to handle cases
+    where fill() overwrites the venue with an empty value."""
     bib = pub.get("_raw_bib", {})
     searchable = " ".join([
         bib.get("venue", ""),
         bib.get("journal", ""),
         bib.get("booktitle", ""),
+        bib.get("conference", ""),
         bib.get("title", ""),
         pub.get("venue", ""),
+        pub.get("_unfilled_venue", ""),
     ]).lower()
     return any(blocked.lower() in searchable for blocked in BLOCKED_VENUES)
 
@@ -91,6 +95,10 @@ def fetch_publications(scholar_id: str) -> list[dict]:
     print(f"Found {len(raw_pubs)} total publication(s) on Scholar. Fetching details...")
 
     for i, pub in enumerate(raw_pubs):
+        # Capture the venue from the unfilled publication (comes from the author's
+        # Scholar profile page). scholarly.fill() may overwrite the bib and lose it.
+        unfilled_venue = pub.get("bib", {}).get("venue", "")
+
         try:
             pub = scholarly.fill(pub)   # fetch full bib details for each entry
         except Exception as e:
@@ -107,14 +115,15 @@ def fetch_publications(scholar_id: str) -> list[dict]:
         number  = bib.get("number", "")
 
         entry = {
-            "title":    title,
-            "year":     year,
-            "venue":    venue,
-            "authors":  authors,
-            "url":      url,
-            "volume":   volume,
-            "number":   number,
-            "_raw_bib": bib,   # kept for blocking check, not rendered
+            "title":           title,
+            "year":            year,
+            "venue":           venue,
+            "authors":         authors,
+            "url":             url,
+            "volume":          volume,
+            "number":          number,
+            "_raw_bib":        bib,            # kept for blocking check, not rendered
+            "_unfilled_venue": unfilled_venue, # pre-fill venue, kept for blocking check
         }
 
         if is_blocked(entry):
@@ -266,13 +275,7 @@ def update_file(filepath: str, pubs: list[dict]) -> bool:
 
     existing_count = count_existing_pubs(original)
     new_count = len(pubs)
-
-    if new_count <= existing_count:
-        print(
-            f"No new publications (existing: {existing_count}, fetched: {new_count}). "
-            "File unchanged."
-        )
-        return False
+    print(f"Existing publications: {existing_count}, fetched after filtering: {new_count}.")
 
     new_block = build_publications_block(pubs)
     updated = re.sub(
@@ -281,6 +284,10 @@ def update_file(filepath: str, pubs: list[dict]) -> bool:
         original,
         flags=re.DOTALL,
     )
+
+    if updated == original:
+        print("No changes to the publications section. File unchanged.")
+        return False
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(updated)
